@@ -26,6 +26,16 @@ public class MainActivity extends Activity {
         try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url))); } catch (Exception e) {}
     }
 
+    boolean stayInApp(Uri u) {
+        String h = u.getHost() == null ? "" : u.getHost();
+        String p = u.getPath() == null ? "" : u.getPath();
+        return HOST.equals(h)
+            || h.endsWith("firebaseapp.com")
+            || h.endsWith("web.app")
+            || h.endsWith("gstatic.com")
+            || p.startsWith("/recaptcha");
+    }
+
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
@@ -34,6 +44,7 @@ public class MainActivity extends Activity {
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
+        s.setUserAgentString(s.getUserAgentString() + " EladApp/1.0");
         s.setJavaScriptCanOpenWindowsAutomatically(true);
         s.setSupportMultipleWindows(true);
         CookieManager.getInstance().setAcceptCookie(true);
@@ -42,7 +53,7 @@ public class MainActivity extends Activity {
             @Override
             public boolean shouldOverrideUrlLoading(WebView v, android.webkit.WebResourceRequest r) {
                 Uri u = r.getUrl();
-                if (HOST.equals(u.getHost())) return false;
+                if (stayInApp(u)) return false;
                 openOutside(u.toString());
                 return true;
             }
