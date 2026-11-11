@@ -6,9 +6,12 @@ import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.Message;
 import android.view.ViewGroup;
 import android.webkit.CookieManager;
+import android.webkit.JavascriptInterface;
 import android.webkit.URLUtil;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -16,11 +19,29 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
+import androidx.credentials.Credential;
+import androidx.credentials.CredentialManager;
+import androidx.credentials.CredentialManagerCallback;
+import androidx.credentials.CustomCredential;
+import androidx.credentials.GetCredentialRequest;
+import androidx.credentials.GetCredentialResponse;
+import androidx.credentials.exceptions.GetCredentialException;
+
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption;
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential;
+
+import java.util.concurrent.Executor;
+
 public class MainActivity extends Activity {
     static final String HOME = "https://elad-mini-appp.fikiry97.workers.dev/";
     static final String HOST = "elad-mini-appp.fikiry97.workers.dev";
+
+    // Paste your Web client ID here (Firebase console > Authentication > Sign-in method > Google > Web SDK configuration)
+    static final String WEB_CLIENT_ID = "PASTE_WEB_CLIENT_ID.apps.googleusercontent.com";
+
     WebView web;
     ValueCallback<Uri[]> chooser;
+    final Executor mainExec = new Handler(Looper.getMainLooper())::post;
 
     void openOutside(String url) {
         try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url))); } catch (Exception e) {}
@@ -36,6 +57,54 @@ public class MainActivity extends Activity {
             || p.startsWith("/recaptcha");
     }
 
+    // Only talk to the page if it is our own site
+    boolean onOurPage() {
+        String u = web.getUrl();
+        return u != null && HOST.equals(Uri.parse(u).getHost());
+    }
+
+    void sendToPage(String js) {
+        web.post(() -> { if (onOurPage()) web.evaluateJavascript(js, null); });
+    }
+
+    // Native Google sign-in: Google blocks its sign-in page inside a WebView,
+    // so we get the Google ID token here and hand it to the web page.
+    void nativeGoogleSignIn() {
+        CredentialManager cm = CredentialManager.create(this);
+        GetCredentialRequest req = new GetCredentialRequest.Builder()
+            .addCredentialOption(new GetSignInWithGoogleOption.Builder(WEB_CLIENT_ID).build())
+            .build();
+        cm.getCredentialAsync(this, req, null, mainExec,
+            new CredentialManagerCallback<GetCredentialResponse, GetCredentialException>() {
+                @Override
+                public void onResult(GetCredentialResponse r) {
+                    Credential c = r.getCredential();
+                    try {
+                        if (c instanceof CustomCredential
+                                && GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL.equals(c.getType())) {
+                            String token = GoogleIdTokenCredential.createFrom(c.getData()).getIdToken();
+                            sendToPage("window.onNativeGoogleToken && window.onNativeGoogleToken('" + token + "')");
+                            return;
+                        }
+                    } catch (Exception e) { /* fall through to error */ }
+                    sendToPage("window.onNativeGoogleError && window.onNativeGoogleError('UnexpectedCredential')");
+                }
+
+                @Override
+                public void onError(GetCredentialException e) {
+                    sendToPage("window.onNativeGoogleError && window.onNativeGoogleError('"
+                        + e.getClass().getSimpleName() + "')");
+                }
+            });
+    }
+
+    public class Bridge {
+        @JavascriptInterface
+        public void googleSignIn() {
+            runOnUiThread(() -> { if (onOurPage()) nativeGoogleSignIn(); });
+        }
+    }
+
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
@@ -48,6 +117,7 @@ public class MainActivity extends Activity {
         s.setJavaScriptCanOpenWindowsAutomatically(true);
         s.setSupportMultipleWindows(true);
         CookieManager.getInstance().setAcceptCookie(true);
+        web.addJavascriptInterface(new Bridge(), "EladApp");
 
         web.setWebViewClient(new WebViewClient() {
             @Override
