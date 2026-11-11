@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "898464952387",
+    "project_id": "elad-79e2f",
+    "storage_bucket": "elad-79e2f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:898464952387:android:448f62cd27107bc62d24f6",
+        "android_client_info": {
+          "package_name": "com.elad.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "898464952387-npmok7t85i1am8gfhqgq4iluq3b4m461.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.elad.app",
+            "certificate_hash": "d8044f9c1eb362a3051d3e252c9a1d444d2a2a74"
+          }
+        },
+        {
+          "client_id": "898464952387-p5nlra4lk8jcm61e9ot6n7tq6okf9j96.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBEV3K0_KAC1jmlr4vo6vdNQa3htv9UCek"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "898464952387-ef1lofnarh97l746ls4dl0tabbopkfru.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
