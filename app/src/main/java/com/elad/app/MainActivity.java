@@ -37,7 +37,7 @@ public class MainActivity extends Activity {
     static final String HOST = "elad-mini-appp.fikiry97.workers.dev";
 
     // Paste your Web client ID here (Firebase console > Authentication > Sign-in method > Google > Web SDK configuration)
-    static final String WEB_CLIENT_ID = "PASTE_WEB_CLIENT_ID.apps.googleusercontent.com";
+    static final String WEB_CLIENT_ID = "898464952387-p5nlra4lk8jcm61e9ot6n7tq6okf9j96.apps.googleusercontent.com.apps.googleusercontent.com";
 
     WebView web;
     ValueCallback<Uri[]> chooser;
