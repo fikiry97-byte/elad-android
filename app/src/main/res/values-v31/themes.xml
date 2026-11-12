@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <style name="Theme.Elad" parent="@android:style/Theme.Material.Light.NoActionBar">
-        <item name="android:windowBackground">@drawable/elad_splash_bg</item>
-        <item name="android:statusBarColor">@color/elad_blue</item>
-        <item name="android:windowSplashScreenBackground">#0E3199</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@android:color/transparent</item>
-    </style>
-</resources>
