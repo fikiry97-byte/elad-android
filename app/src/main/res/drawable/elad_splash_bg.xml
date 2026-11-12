@@ -10,4 +10,12 @@
                 android:endColor="#0B1B52"/>
         </shape>
     </item>
+    <item
+        android:width="250dp"
+        android:height="51dp"
+        android:gravity="center">
+        <bitmap
+            android:src="@drawable/elad_logo_white"
+            android:gravity="fill"/>
+    </item>
 </layer-list>
