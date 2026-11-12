@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Elad" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@drawable/elad_splash_bg</item>
+        <item name="android:statusBarColor">@color/elad_blue</item>
+    </style>
+</resources>
