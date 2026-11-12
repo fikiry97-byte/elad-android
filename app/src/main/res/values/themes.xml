@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <style name="Theme.Elad.Splash" parent="Theme.SplashScreen">
-        <item name="windowSplashScreenBackground">@color/elad_blue</item>
-        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher</item>
-        <item name="postSplashScreenTheme">@style/Theme.Elad</item>
-    </style>
-</resources>
