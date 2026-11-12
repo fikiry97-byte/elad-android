@@ -3,22 +3,30 @@ package com.elad.app;
 import android.app.Activity;
 import android.app.DownloadManager;
 import android.content.Intent;
+import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
+import android.view.Gravity;
+import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.URLUtil;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
+import android.webkit.WebResourceError;
+import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
 
+import androidx.core.splashscreen.SplashScreen;
 import androidx.credentials.Credential;
 import androidx.credentials.CredentialManager;
 import androidx.credentials.CredentialManagerCallback;
@@ -37,10 +45,13 @@ public class MainActivity extends Activity {
     static final String HOST = "elad-mini-appp.fikiry97.workers.dev";
 
     // Paste your Web client ID here (Firebase console > Authentication > Sign-in method > Google > Web SDK configuration)
-static final String WEB_CLIENT_ID = "898464952387-p5nlra4lk8jcm61e9ot6n7tq6okf9j96.apps.googleusercontent.com";
+    static final String WEB_CLIENT_ID = "898464952387-p5nlra4lk8jcm61e9ot6n7tq6okf9j96.apps.googleusercontent.com";
     WebView web;
+    View splashOverlay;
+    boolean splashGone = false;
     ValueCallback<Uri[]> chooser;
     final Executor mainExec = new Handler(Looper.getMainLooper())::post;
+    final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     void openOutside(String url) {
         try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url))); } catch (Exception e) {}
@@ -64,6 +75,21 @@ static final String WEB_CLIENT_ID = "898464952387-p5nlra4lk8jcm61e9ot6n7tq6okf9j
 
     void sendToPage(String js) {
         web.post(() -> { if (onOurPage()) web.evaluateJavascript(js, null); });
+    }
+
+    // Hide the native splash overlay once the real page has drawn (or after a safety timeout).
+    void hideSplashOverlay() {
+        if (splashGone || splashOverlay == null) return;
+        splashGone = true;
+        splashOverlay.animate()
+            .alpha(0f)
+            .setDuration(280)
+            .withEndAction(() -> {
+                if (splashOverlay.getParent() != null) {
+                    ((ViewGroup) splashOverlay.getParent()).removeView(splashOverlay);
+                }
+            })
+            .start();
     }
 
     // Native Google sign-in: Google blocks its sign-in page inside a WebView,
@@ -106,9 +132,20 @@ static final String WEB_CLIENT_ID = "898464952387-p5nlra4lk8jcm61e9ot6n7tq6okf9j
 
     @Override
     protected void onCreate(Bundle b) {
+        SplashScreen.installSplashScreen(this);
         super.onCreate(b);
+
+        // Root container: WebView underneath, blue gradient + logo overlay on top.
+        FrameLayout root = new FrameLayout(this);
+
         web = new WebView(this);
-        setContentView(web, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        root.addView(web, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        splashOverlay = buildSplashOverlay();
+        root.addView(splashOverlay, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        setContentView(root);
+
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
@@ -117,15 +154,29 @@ static final String WEB_CLIENT_ID = "898464952387-p5nlra4lk8jcm61e9ot6n7tq6okf9j
         s.setSupportMultipleWindows(true);
         CookieManager.getInstance().setAcceptCookie(true);
         web.addJavascriptInterface(new Bridge(), "EladApp");
-                web.setBackgroundColor(android.graphics.Color.parseColor("#1046E6"));
+        web.setBackgroundColor(Color.parseColor("#1046E6"));
 
         web.setWebViewClient(new WebViewClient() {
             @Override
-            public boolean shouldOverrideUrlLoading(WebView v, android.webkit.WebResourceRequest r) {
+            public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest r) {
                 Uri u = r.getUrl();
                 if (stayInApp(u)) return false;
                 openOutside(u.toString());
                 return true;
+            }
+
+            @Override
+            public void onPageFinished(WebView v, String url) {
+                super.onPageFinished(v, url);
+                if (url != null && HOST.equals(Uri.parse(url).getHost())) {
+                    hideSplashOverlay();
+                }
+            }
+
+            @Override
+            public void onReceivedError(WebView v, WebResourceRequest r, WebResourceError e) {
+                super.onReceivedError(v, r, e);
+                if (r.isForMainFrame()) hideSplashOverlay();
             }
         });
         web.setWebChromeClient(new WebChromeClient() {
@@ -142,7 +193,7 @@ static final String WEB_CLIENT_ID = "898464952387-p5nlra4lk8jcm61e9ot6n7tq6okf9j
                 WebView tmp = new WebView(MainActivity.this);
                 tmp.setWebViewClient(new WebViewClient() {
                     @Override
-                    public boolean shouldOverrideUrlLoading(WebView x, android.webkit.WebResourceRequest r) {
+                    public boolean shouldOverrideUrlLoading(WebView x, WebResourceRequest r) {
                         openOutside(r.getUrl().toString());
                         return true;
                     }
@@ -162,7 +213,25 @@ static final String WEB_CLIENT_ID = "898464952387-p5nlra4lk8jcm61e9ot6n7tq6okf9j
                 ((DownloadManager) getSystemService(DOWNLOAD_SERVICE)).enqueue(r);
             } catch (Exception e) { openOutside(url); }
         });
+
+        // Safety net: never leave the overlay stuck on screen (e.g. very slow or broken connection).
+        mainHandler.postDelayed(this::hideSplashOverlay, 8000);
+
         if (b == null) web.loadUrl(HOME); else web.restoreState(b);
+    }
+
+    View buildSplashOverlay() {
+        FrameLayout overlay = new FrameLayout(this);
+        overlay.setBackgroundResource(R.drawable.splash_gradient);
+
+        ImageView logo = new ImageView(this);
+        logo.setImageResource(R.drawable.ic_launcher);
+        int size = (int) (140 * getResources().getDisplayMetrics().density);
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(size, size);
+        lp.gravity = Gravity.CENTER;
+        overlay.addView(logo, lp);
+
+        return overlay;
     }
 
     @Override
