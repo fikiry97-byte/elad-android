@@ -1,18 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <!-- Launch theme: system splash is invisible (flat blue, transparent icon) -->
     <style name="Theme.Elad.Splash" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">#0F36B8</item>
         <item name="windowSplashScreenAnimatedIcon">@android:color/transparent</item>
         <item name="postSplashScreenTheme">@style/Theme.Elad.Main</item>
-        <item name="android:statusBarColor">#1647E8</item>
     </style>
 
-    <!-- App theme: window background is the Elad gradient + logo -->
     <style name="Theme.Elad.Main" parent="@android:style/Theme.Material.Light.NoActionBar">
         <item name="android:windowBackground">@drawable/elad_splash_bg</item>
         <item name="android:statusBarColor">#1647E8</item>
+        <item name="android:navigationBarColor">#0B1B52</item>
         <item name="android:windowLightStatusBar">false</item>
     </style>
 
