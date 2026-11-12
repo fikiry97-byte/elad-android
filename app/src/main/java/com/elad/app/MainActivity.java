@@ -44,8 +44,9 @@ public class MainActivity extends Activity {
     static final String HOME = "https://elad-mini-appp.fikiry97.workers.dev/";
     static final String HOST = "elad-mini-appp.fikiry97.workers.dev";
 
-    // Paste your Web client ID here (Firebase console > Authentication > Sign-in method > Google > Web SDK configuration)
+    // Web client ID (Firebase console > Authentication > Sign-in method > Google > Web SDK configuration)
     static final String WEB_CLIENT_ID = "898464952387-p5nlra4lk8jcm61e9ot6n7tq6okf9j96.apps.googleusercontent.com";
+
     WebView web;
     View splashOverlay;
     boolean splashGone = false;
@@ -77,10 +78,25 @@ public class MainActivity extends Activity {
         web.post(() -> { if (onOurPage()) web.evaluateJavascript(js, null); });
     }
 
-    // Hide the native splash overlay once the real page has drawn (or after a safety timeout).
+    // Blue status bar with light icons while the splash is showing
+    void statusBarForSplash() {
+        getWindow().setStatusBarColor(Color.parseColor("#1046E6"));
+        View d = getWindow().getDecorView();
+        d.setSystemUiVisibility(d.getSystemUiVisibility() & ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
+    }
+
+    // White status bar with dark icons for the normal app
+    void statusBarForApp() {
+        getWindow().setStatusBarColor(Color.WHITE);
+        View d = getWindow().getDecorView();
+        d.setSystemUiVisibility(d.getSystemUiVisibility() | View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
+    }
+
+    // Fade the native splash out once the real page is on screen (or after a safety timeout).
     void hideSplashOverlay() {
         if (splashGone || splashOverlay == null) return;
         splashGone = true;
+        statusBarForApp();
         splashOverlay.animate()
             .alpha(0f)
             .setDuration(280)
@@ -134,8 +150,9 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle b) {
         SplashScreen.installSplashScreen(this);
         super.onCreate(b);
+        statusBarForSplash();
 
-        // Root container: WebView underneath, blue gradient + logo overlay on top.
+        // Root container: WebView underneath, gradient + logo overlay on top.
         FrameLayout root = new FrameLayout(this);
 
         web = new WebView(this);
@@ -169,7 +186,8 @@ public class MainActivity extends Activity {
             public void onPageFinished(WebView v, String url) {
                 super.onPageFinished(v, url);
                 if (url != null && HOST.equals(Uri.parse(url).getHost())) {
-                    hideSplashOverlay();
+                    // Small delay so the page's own splash has painted before we fade ours out
+                    mainHandler.postDelayed(MainActivity.this::hideSplashOverlay, 150);
                 }
             }
 
@@ -214,20 +232,27 @@ public class MainActivity extends Activity {
             } catch (Exception e) { openOutside(url); }
         });
 
-        // Safety net: never leave the overlay stuck on screen (e.g. very slow or broken connection).
+        // Safety net: never leave the overlay stuck on screen (very slow or broken connection).
         mainHandler.postDelayed(this::hideSplashOverlay, 8000);
 
         if (b == null) web.loadUrl(HOME); else web.restoreState(b);
     }
 
+    // Same look as the Worker's #eladSplash: blue gradient and the white wordmark,
+    // width = 62% of the screen, at most 260dp, centered.
     View buildSplashOverlay() {
         FrameLayout overlay = new FrameLayout(this);
         overlay.setBackgroundResource(R.drawable.splash_gradient);
 
         ImageView logo = new ImageView(this);
-        logo.setImageResource(R.drawable.ic_launcher);
-        int size = (int) (140 * getResources().getDisplayMetrics().density);
-        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(size, size);
+        logo.setImageResource(R.drawable.elad_logo_white);
+        logo.setAdjustViewBounds(true);
+        logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
+
+        float density = getResources().getDisplayMetrics().density;
+        int screenW = getResources().getDisplayMetrics().widthPixels;
+        int w = Math.min((int) (screenW * 0.62f), (int) (260 * density));
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(w, ViewGroup.LayoutParams.WRAP_CONTENT);
         lp.gravity = Gravity.CENTER;
         overlay.addView(logo, lp);
 
