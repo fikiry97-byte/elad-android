@@ -3,28 +3,19 @@
     <item>
         <shape android:shape="rectangle">
             <gradient
+                android:type="linear"
                 android:angle="270"
-                android:startColor="#FF1046E6"
-                android:endColor="#FF0B1B4D" />
-        </shape>
-    </item>
-    <item>
-        <shape android:shape="rectangle">
-            <gradient
-                android:type="radial"
-                android:centerX="0.18"
-                android:centerY="0.0"
-                android:gradientRadius="130%"
-                android:startColor="#FF4F7BFF"
-                android:endColor="#004F7BFF" />
+                android:startColor="#1647E8"
+                android:centerColor="#0F36B8"
+                android:endColor="#0B1B52"/>
         </shape>
     </item>
     <item
-        android:width="245dp"
+        android:width="250dp"
         android:height="51dp"
         android:gravity="center">
         <bitmap
-            android:src="@drawable/elad_splash_logo"
-            android:gravity="fill" />
+            android:src="@drawable/elad_logo_white"
+            android:gravity="fill"/>
     </item>
 </layer-list>
