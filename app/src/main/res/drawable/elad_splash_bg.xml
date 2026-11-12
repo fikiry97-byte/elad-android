@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="270"
+                android:startColor="#FF1046E6"
+                android:endColor="#FF0B1B4D" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:type="radial"
+                android:centerX="0.18"
+                android:centerY="0.0"
+                android:gradientRadius="130%"
+                android:startColor="#FF4F7BFF"
+                android:endColor="#004F7BFF" />
+        </shape>
+    </item>
+    <item
+        android:width="245dp"
+        android:height="51dp"
+        android:gravity="center">
+        <bitmap
+            android:src="@drawable/elad_splash_logo"
+            android:gravity="fill" />
+    </item>
+</layer-list>
