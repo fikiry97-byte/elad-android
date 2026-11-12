@@ -1,9 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
-<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-    <gradient
-        android:type="linear"
-        android:angle="135"
-        android:startColor="#4F7BFF"
-        android:centerColor="#1046E6"
-        android:endColor="#0B1B4D"/>
-</shape>
+<!-- Same look as the Worker's #eladSplash: linear #1046E6 to #0B1B4D with a soft light at the top left -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="270"
+                android:startColor="#1046E6"
+                android:endColor="#0B1B4D"/>
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:type="radial"
+                android:centerX="0.18"
+                android:centerY="0.0"
+                android:gradientRadius="85%p"
+                android:startColor="#B34F7BFF"
+                android:endColor="#004F7BFF"/>
+        </shape>
+    </item>
+</layer-list>
