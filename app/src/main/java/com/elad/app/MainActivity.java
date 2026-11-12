@@ -4,7 +4,9 @@ import android.app.Activity;
 import android.app.DownloadManager;
 import android.content.Intent;
 import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
@@ -73,13 +75,20 @@ public class MainActivity extends Activity {
         web.post(() -> { if (onOurPage()) web.evaluateJavascript(js, null); });
     }
 
-    // White status bar with dark icons for the normal app (called once the page's own splash is done)
+    // Switch to the normal app look once the page's own splash is done:
+    // white status bar + white navigation bar, and the launch gradient is removed
+    // from the window so it can never show again (sign-in reloads, blank moments, etc.)
     void statusBarForApp() {
         if (statusBarSwitched) return;
         statusBarSwitched = true;
         getWindow().setStatusBarColor(Color.WHITE);
+        getWindow().setNavigationBarColor(Color.WHITE);
+        getWindow().setBackgroundDrawable(new ColorDrawable(Color.WHITE));
+        web.setBackgroundColor(Color.WHITE);
         View d = getWindow().getDecorView();
-        d.setSystemUiVisibility(d.getSystemUiVisibility() | View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
+        int flags = d.getSystemUiVisibility() | View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+        if (Build.VERSION.SDK_INT >= 26) flags |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+        d.setSystemUiVisibility(flags);
     }
 
     // Native Google sign-in: Google blocks its sign-in page inside a WebView,
@@ -119,7 +128,7 @@ public class MainActivity extends Activity {
             runOnUiThread(() -> { if (onOurPage()) nativeGoogleSignIn(); });
         }
 
-        // Optional: the page can call EladApp.splashDone() when its own splash fades out
+        // The page calls EladApp.splashDone() when its own splash fades out
         @JavascriptInterface
         public void splashDone() {
             runOnUiThread(() -> { if (onOurPage()) statusBarForApp(); });
@@ -212,7 +221,7 @@ public class MainActivity extends Activity {
             } catch (Exception e) { openOutside(url); }
         });
 
-        // Safety net: never leave the status bar stuck blue on a very slow or broken connection.
+        // Safety net: never leave the launch look stuck on a very slow or broken connection.
         mainHandler.postDelayed(this::statusBarForApp, 8000);
 
         if (b == null) web.loadUrl(HOME); else web.restoreState(b);
