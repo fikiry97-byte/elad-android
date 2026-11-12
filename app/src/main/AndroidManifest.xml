@@ -9,7 +9,7 @@
     <application
         android:label="Elad"
         android:icon="@drawable/ic_launcher"
-        android:theme="@style/Theme.Elad"
+        android:theme="@style/Theme.Elad.Splash"
         android:allowBackup="false"
         android:supportsRtl="true"
         android:hardwareAccelerated="true"
