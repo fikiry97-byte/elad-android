@@ -35,12 +35,13 @@ import androidx.credentials.exceptions.GetCredentialException;
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption;
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential;
 
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
 import java.util.concurrent.Executor;
 
 public class MainActivity extends Activity {
     static final String HOME = "https://elad-mini-appp.fikiry97.workers.dev/";
     static final String HOST = "elad-mini-appp.fikiry97.workers.dev";
-    static final String OFFLINE_PAGE = "file:///android_asset/offline.html";
 
     // Web client ID (Firebase console > Authentication > Sign-in method > Google > Web SDK configuration)
     static final String WEB_CLIENT_ID = "898464952387-p5nlra4lk8jcm61e9ot6n7tq6okf9j96.apps.googleusercontent.com";
@@ -76,8 +77,6 @@ public class MainActivity extends Activity {
         web.post(() -> { if (onOurPage()) web.evaluateJavascript(js, null); });
     }
 
-    // The theme is already white with dark icons. This only sets the icon colours
-    // that themes cannot set on every API level.
     void applySystemBars() {
         getWindow().setStatusBarColor(Color.WHITE);
         getWindow().setNavigationBarColor(Color.WHITE);
@@ -85,6 +84,24 @@ public class MainActivity extends Activity {
         int flags = d.getSystemUiVisibility() | View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
         if (Build.VERSION.SDK_INT >= 26) flags |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
         d.setSystemUiVisibility(flags);
+    }
+
+    // Reads offline.html from the app and loads it UNDER THE REAL SITE ADDRESS.
+    // That makes it the same origin as the website, so it can read the saved login,
+    // the saved logo and the offline cache.
+    void showOffline(WebView v) {
+        try {
+            InputStream in = getAssets().open("offline.html");
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+            in.close();
+            String html = new String(out.toByteArray(), "UTF-8");
+            v.loadDataWithBaseURL(HOME, html, "text/html", "UTF-8", HOME);
+        } catch (Exception e) {
+            ready = true;
+        }
     }
 
     // Native Google sign-in: Google blocks its sign-in page inside a WebView,
@@ -124,7 +141,7 @@ public class MainActivity extends Activity {
             runOnUiThread(() -> { if (onOurPage()) nativeGoogleSignIn(); });
         }
 
-        // Kept so the page can still call it. The app no longer has a second splash.
+        // Kept so the page can still call it. The app has no second splash.
         @JavascriptInterface
         public void splashDone() { }
     }
@@ -162,7 +179,6 @@ public class MainActivity extends Activity {
                 return true;
             }
 
-            // First paint of any page (online page, service-worker page, or offline fallback)
             @Override
             public void onPageCommitVisible(WebView v, String url) {
                 super.onPageCommitVisible(v, url);
@@ -176,15 +192,13 @@ public class MainActivity extends Activity {
                 CookieManager.getInstance().flush();
             }
 
-            // No network and the service worker has nothing cached yet (first ever launch offline):
-            // show the bundled sign-in screen instead of Chrome's error page.
+            // No network and the service worker did not serve the page:
+            // open the offline page (same origin, so it can restore the signed-in app).
             @Override
             public void onReceivedError(WebView v, WebResourceRequest r, WebResourceError e) {
                 super.onReceivedError(v, r, e);
                 if (!r.isForMainFrame()) return;
-                String failed = r.getUrl().toString();
-                if (failed.startsWith("file:")) { ready = true; return; }
-                v.post(() -> v.loadUrl(OFFLINE_PAGE));
+                v.post(() -> showOffline(v));
             }
         });
 
