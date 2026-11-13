@@ -6,20 +6,21 @@
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;background:#fff;font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#0F172A}
 .w{min-height:100%;display:flex;flex-direction:column;justify-content:center;padding:24px 22px;max-width:460px;margin:0 auto}
-.logo{text-align:center;font-size:34px;font-weight:800;letter-spacing:-1px;color:#1046E6;margin-bottom:6px}
+.logo{width:190px;height:40px;margin:0 auto 14px;background-color:#1046E6;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;-webkit-mask-position:center;mask-position:center;-webkit-mask-size:contain;mask-size:contain}
+.logot{text-align:center;font-size:34px;font-weight:800;letter-spacing:-1px;color:#1046E6;margin-bottom:6px}
 .t{text-align:center;font-size:24px;font-weight:800;letter-spacing:-.5px;margin:0 0 16px}
 .tabs{display:grid;grid-template-columns:1fr 1fr;padding:4px;border-radius:16px;background:#F1F4FB;margin-bottom:16px}
-.tabs button{border:0;background:none;height:42px;border-radius:12px;font:700 14px inherit;font-family:inherit;color:#64748B}
+.tabs button{border:0;background:none;height:42px;border-radius:12px;font-weight:700;font-size:14px;font-family:inherit;color:#64748B}
 .tabs button.on{background:#fff;color:#1046E6;box-shadow:0 4px 12px rgba(16,70,230,.14)}
 label{display:block;margin:0 0 6px;font-size:12px;font-weight:700;color:#475569}
 input{width:100%;height:48px;padding:0 14px;margin-bottom:12px;border:1.5px solid #E3EAF8;border-radius:14px;background:#F8FAFF;font-size:16px;font-family:inherit;outline:0}
-.go{width:100%;height:50px;border:0;border-radius:16px;color:#fff;font:700 15.5px inherit;font-family:inherit;background:linear-gradient(135deg,#4F7BFF,#1046E6);box-shadow:0 12px 24px rgba(16,70,230,.28)}
+.go{width:100%;height:50px;border:0;border-radius:16px;color:#fff;font-weight:700;font-size:15.5px;font-family:inherit;background:linear-gradient(135deg,#4F7BFF,#1046E6);box-shadow:0 12px 24px rgba(16,70,230,.28)}
 .m{margin-top:12px;text-align:center;font-size:13px;font-weight:600;color:#B42318;min-height:18px}
 .n{margin-top:14px;text-align:center;font-size:12.5px;color:#64748B;line-height:1.5}
 #cn{display:none}
 </style></head><body>
-<div class="w">
-  <div class="logo">Elad</div>
+<div class="w" id="fb">
+  <div id="lg"></div>
   <h1 class="t" id="ti">Welcome back</h1>
   <div class="tabs"><button id="b0" class="on" type="button">Log in</button><button id="b1" type="button">Create account</button></div>
   <div id="cn"><label>Full name</label><input type="text" autocomplete="name" placeholder="Your full name"></div>
@@ -30,12 +31,46 @@ input{width:100%;height:48px;padding:0 14px;margin-bottom:12px;border:1.5px soli
   <div class="n">Signing in and creating an account need internet. This page opens the real sign-in automatically as soon as you are connected.</div>
 </div>
 <script>
-var HOME="https://elad-mini-appp.fikiry97.workers.dev/",mode=0;
-function $(i){return document.getElementById(i)}
-function setMode(i){mode=i;$("b0").className=i?"":"on";$("b1").className=i?"on":"";
-  $("cn").style.display=i?"block":"none";$("ti").textContent=i?"Welcome to Elad":"Welcome back";$("go").textContent=i?"Create account":"Log in"}
-$("b0").onclick=function(){setMode(0)};$("b1").onclick=function(){setMode(1)};
-function online(){ $("m").style.color="#16803A"; $("m").textContent="Back online. Opening sign-in…"; setTimeout(function(){location.replace(HOME)},400); }
-$("go").onclick=function(){ if(navigator.onLine) online(); else { $("m").style.color="#B42318"; $("m").textContent="You are offline. Connect to the internet to sign in."; } };
-window.addEventListener("online",online);
+(function(){
+  var HOME="https://elad-mini-appp.fikiry97.workers.dev/", mode=0;
+  function $(i){return document.getElementById(i)}
+
+  // 1. Try to open the saved copy of the real app (this restores a signed-in user and shows the real logo)
+  function restore(){
+    if(!window.caches) return Promise.reject();
+    return caches.match(HOME+"shell").then(function(r){
+      if(!r) throw 0;
+      return r.text();
+    }).then(function(t){
+      if(!t || t.indexOf("<head>")<0) throw 0;
+      t=t.replace("<head>","<head><script>window.__ELAD_OFFLINE=1<\/script>");
+      document.open(); document.write(t); document.close();
+    });
+  }
+
+  // 2. Last resort (the app has never been opened online on this phone): simple sign-in screen with the saved logo
+  function fallback(){
+    var lg=$("lg"), src=null;
+    try{ src=localStorage.getItem("eladLogo"); }catch(e){}
+    if(src){
+      lg.className="logo";
+      lg.style.webkitMaskImage='url("'+src+'")'; lg.style.maskImage='url("'+src+'")';
+    }else{
+      lg.className="logot"; lg.textContent="Elad";
+    }
+    $("fb").style.display="flex";
+  }
+
+  function setMode(i){mode=i;$("b0").className=i?"":"on";$("b1").className=i?"on":"";
+    $("cn").style.display=i?"block":"none";$("ti").textContent=i?"Welcome to Elad":"Welcome back";$("go").textContent=i?"Create account":"Log in"}
+  function online(){ $("m").style.color="#16803A"; $("m").textContent="Back online. Opening…"; setTimeout(function(){location.replace(HOME)},400); }
+
+  $("fb").style.display="none";
+  $("b0").onclick=function(){setMode(0)};
+  $("b1").onclick=function(){setMode(1)};
+  $("go").onclick=function(){ if(navigator.onLine) online(); else { $("m").style.color="#B42318"; $("m").textContent="You are offline. Connect to the internet to sign in."; } };
+  window.addEventListener("online",online);
+
+  restore().catch(fallback);
+})();
 </script></body></html>
