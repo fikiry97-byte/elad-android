@@ -14,6 +14,22 @@
       },
       "oauth_client": [
         {
+          "client_id": "898464952387-6aq4ssmi0tq74tdd9hit3p8igfunq029.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.elad.app",
+            "certificate_hash": "22ca2b48772d9bb8d1dcbfa120f5466f1b5c034d"
+          }
+        },
+        {
+          "client_id": "898464952387-ce9j0ugj0b8ot1g2ceek9sh8vj7u1ers.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.elad.app",
+            "certificate_hash": "958943defdc5cea90290be256b396779bf8f4313"
+          }
+        },
+        {
           "client_id": "898464952387-npmok7t85i1am8gfhqgq4iluq3b4m461.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
