@@ -4,7 +4,6 @@ import android.app.Activity;
 import android.app.DownloadManager;
 import android.content.Intent;
 import android.graphics.Color;
-import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -41,13 +40,14 @@ import java.util.concurrent.Executor;
 public class MainActivity extends Activity {
     static final String HOME = "https://elad-mini-appp.fikiry97.workers.dev/";
     static final String HOST = "elad-mini-appp.fikiry97.workers.dev";
+    static final String OFFLINE_PAGE = "file:///android_asset/offline.html";
 
     // Web client ID (Firebase console > Authentication > Sign-in method > Google > Web SDK configuration)
     static final String WEB_CLIENT_ID = "898464952387-p5nlra4lk8jcm61e9ot6n7tq6okf9j96.apps.googleusercontent.com";
 
     WebView web;
-    boolean statusBarSwitched = false;
     ValueCallback<Uri[]> chooser;
+    volatile boolean ready = false;   // native splash stays until the first page is visible
     final Executor mainExec = new Handler(Looper.getMainLooper())::post;
     final Handler mainHandler = new Handler(Looper.getMainLooper());
 
@@ -58,6 +58,7 @@ public class MainActivity extends Activity {
     boolean stayInApp(Uri u) {
         String h = u.getHost() == null ? "" : u.getHost();
         String p = u.getPath() == null ? "" : u.getPath();
+        if ("file".equals(u.getScheme()) && p.startsWith("/android_asset/")) return true;
         return HOST.equals(h)
             || h.endsWith("firebaseapp.com")
             || h.endsWith("web.app")
@@ -75,16 +76,11 @@ public class MainActivity extends Activity {
         web.post(() -> { if (onOurPage()) web.evaluateJavascript(js, null); });
     }
 
-    // Switch to the normal app look once the page's own splash is done:
-    // white status bar + white navigation bar, and the launch gradient is removed
-    // from the window so it can never show again (sign-in reloads, blank moments, etc.)
-    void statusBarForApp() {
-        if (statusBarSwitched) return;
-        statusBarSwitched = true;
+    // The theme is already white with dark icons. This only sets the icon colours
+    // that themes cannot set on every API level.
+    void applySystemBars() {
         getWindow().setStatusBarColor(Color.WHITE);
         getWindow().setNavigationBarColor(Color.WHITE);
-        getWindow().setBackgroundDrawable(new ColorDrawable(Color.WHITE));
-        web.setBackgroundColor(Color.WHITE);
         View d = getWindow().getDecorView();
         int flags = d.getSystemUiVisibility() | View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
         if (Build.VERSION.SDK_INT >= 26) flags |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
@@ -128,25 +124,23 @@ public class MainActivity extends Activity {
             runOnUiThread(() -> { if (onOurPage()) nativeGoogleSignIn(); });
         }
 
-        // The page calls EladApp.splashDone() when its own splash fades out
+        // Kept so the page can still call it. The app no longer has a second splash.
         @JavascriptInterface
-        public void splashDone() {
-            runOnUiThread(() -> { if (onOurPage()) statusBarForApp(); });
-        }
+        public void splashDone() { }
     }
 
     @Override
     protected void onCreate(Bundle b) {
-        // Must run before super.onCreate. Hide the system icon splash entirely.
+        // Must run before super.onCreate. White background + ELAD icon, shown instantly by the system.
         SplashScreen splash = SplashScreen.installSplashScreen(this);
+        splash.setKeepOnScreenCondition(() -> !ready);
         splash.setOnExitAnimationListener(provider -> provider.remove());
 
         super.onCreate(b);
+        applySystemBars();
 
-        // No overlay: the window background (elad_splash_bg) is the launch screen,
-        // and the WebView is transparent so it shows through until the page paints.
         web = new WebView(this);
-        web.setBackgroundColor(Color.TRANSPARENT);
+        web.setBackgroundColor(Color.WHITE);
         setContentView(web);
 
         WebSettings s = web.getSettings();
@@ -155,7 +149,7 @@ public class MainActivity extends Activity {
         s.setUserAgentString(s.getUserAgentString() + " EladApp/1.0");
         s.setJavaScriptCanOpenWindowsAutomatically(true);
         s.setSupportMultipleWindows(true);
-        // Do NOT set any LOAD_CACHE_* cache mode (service workers need the default)
+        // Do NOT set any LOAD_CACHE_* cache mode (the service worker needs the default)
         CookieManager.getInstance().setAcceptCookie(true);
         web.addJavascriptInterface(new Bridge(), "EladApp");
 
@@ -168,19 +162,29 @@ public class MainActivity extends Activity {
                 return true;
             }
 
+            // First paint of any page (online page, service-worker page, or offline fallback)
             @Override
-            public void onPageFinished(WebView v, String url) {
-                super.onPageFinished(v, url);
-                if (url != null && HOST.equals(Uri.parse(url).getHost())) {
-                    // Fallback in case the page never calls EladApp.splashDone()
-                    mainHandler.postDelayed(MainActivity.this::statusBarForApp, 1500);
-                }
+            public void onPageCommitVisible(WebView v, String url) {
+                super.onPageCommitVisible(v, url);
+                ready = true;
             }
 
             @Override
+            public void onPageFinished(WebView v, String url) {
+                super.onPageFinished(v, url);
+                ready = true;
+                CookieManager.getInstance().flush();
+            }
+
+            // No network and the service worker has nothing cached yet (first ever launch offline):
+            // show the bundled sign-in screen instead of Chrome's error page.
+            @Override
             public void onReceivedError(WebView v, WebResourceRequest r, WebResourceError e) {
                 super.onReceivedError(v, r, e);
-                if (r.isForMainFrame()) statusBarForApp();
+                if (!r.isForMainFrame()) return;
+                String failed = r.getUrl().toString();
+                if (failed.startsWith("file:")) { ready = true; return; }
+                v.post(() -> v.loadUrl(OFFLINE_PAGE));
             }
         });
 
@@ -221,8 +225,8 @@ public class MainActivity extends Activity {
             } catch (Exception e) { openOutside(url); }
         });
 
-        // Safety net: never leave the launch look stuck on a very slow or broken connection.
-        mainHandler.postDelayed(this::statusBarForApp, 8000);
+        // Safety net: never hold the splash longer than 2.5 s on a very slow connection.
+        mainHandler.postDelayed(() -> ready = true, 2500);
 
         if (b == null) web.loadUrl(HOME); else web.restoreState(b);
     }
@@ -235,6 +239,10 @@ public class MainActivity extends Activity {
         }
         super.onActivityResult(req, res, data);
     }
+
+    // WebView writes cookies lazily. Flush so the 30-day session survives the app being killed.
+    @Override protected void onPause() { CookieManager.getInstance().flush(); super.onPause(); }
+    @Override protected void onStop()  { CookieManager.getInstance().flush(); super.onStop(); }
 
     @Override
     protected void onSaveInstanceState(Bundle o) { super.onSaveInstanceState(o); web.saveState(o); }
