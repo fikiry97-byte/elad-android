@@ -48,6 +48,14 @@ public class MainActivity extends Activity {
     WebView web;
     ValueCallback<Uri[]> chooser;
     volatile boolean ready = false;   // native splash stays until the first page is visible
+
+    // How many times we've retried loading HOME after a network error, before
+    // giving up and falling back to the bundled offline.html. This gives the
+    // Service Worker (which caches the last signed-in app state) a real chance
+    // to serve its cache instead of us short-circuiting straight to a blank,
+    // origin-isolated static page.
+    int offlineRetries = 0;
+
     final Executor mainExec = new Handler(Looper.getMainLooper())::post;
     final Handler mainHandler = new Handler(Looper.getMainLooper());
 
@@ -170,17 +178,31 @@ public class MainActivity extends Activity {
             public void onPageFinished(WebView v, String url) {
                 super.onPageFinished(v, url);
                 ready = true;
+                // A page finished loading (either the real site or offline.html).
+                // Reset the retry count so the next time we lose connectivity we
+                // again get a fresh chance to let the Service Worker serve its cache.
+                offlineRetries = 0;
                 CookieManager.getInstance().flush();
             }
 
             // No network and the service worker has nothing cached yet:
             // show the bundled sign-in screen instead of Chrome's error page.
+            // Before giving up, retry HOME once so the Service Worker (which
+            // caches the last signed-in app shell) gets a real chance to
+            // intercept the navigation and serve it from cache.
             @Override
             public void onReceivedError(WebView v, WebResourceRequest r, WebResourceError e) {
                 super.onReceivedError(v, r, e);
                 if (!r.isForMainFrame()) return;
                 String failed = r.getUrl().toString();
                 if (failed.startsWith("file:")) { ready = true; return; }
+
+                if (offlineRetries < 1) {
+                    offlineRetries++;
+                    mainHandler.postDelayed(() -> v.loadUrl(HOME), 200);
+                    return;
+                }
+                offlineRetries = 0;
                 v.post(() -> v.loadUrl(OFFLINE_PAGE));
             }
         });
