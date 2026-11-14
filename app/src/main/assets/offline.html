@@ -36,7 +36,7 @@ input{width:100%;height:48px;padding:0 14px;margin-bottom:12px;border:1.5px soli
   <div class="n">Once you reconnect, this screen will automatically open your account exactly as you left it.</div>
 </div>
 <script>
-var HOME="https://elad-mini-appp.fikiry97.workers.dev/",mode=0,going=false;
+var HOME="https://elad-mini-appp.fikiry97.workers.dev/",mode=0,going=false,probing=false;
 function $(i){return document.getElementById(i)}
 function setMode(i){mode=i;$("b0").className=i?"":"on";$("b1").className=i?"on":"";
   $("cn").style.display=i?"block":"none";$("ti").textContent=i?"Welcome to Elad":"Welcome back";$("go").textContent=i?"Create account":"Log in"}
@@ -48,13 +48,38 @@ function online(){
   $("m").textContent="Back online. Opening your account…";
   setTimeout(function(){location.replace(HOME)},350);
 }
-$("go").onclick=function(){
-  if(navigator.onLine) online();
-  else { $("m").style.color="#B42318"; $("m").textContent="You are offline. Connect to the internet to continue."; }
-};
-window.addEventListener("online",online);
 
-/* Backup watchdog: navigator "online"/"offline" events are not always
-   reliable on mobile networks, so keep checking in the background too. */
-setInterval(function(){ if(navigator.onLine && !going) online(); }, 3000);
+/* navigator.onLine is also true on a very weak connection, so before leaving this
+   page we check that the site can really be reached. Otherwise the app would jump
+   to a failing load and back again in a loop. */
+function probe(cb){
+  var done=false,c=window.AbortController?new AbortController():null;
+  function finish(ok){ if(done)return; done=true; clearTimeout(t); cb(ok); }
+  var t=setTimeout(function(){ if(c){try{c.abort()}catch(e){}} finish(false); },6000);
+  try{
+    fetch(HOME,{mode:"no-cors",cache:"no-store",signal:c?c.signal:undefined})
+      .then(function(){finish(true)},function(){finish(false)});
+  }catch(e){ finish(false); }
+}
+
+function tryOpen(manual){
+  if(going||probing)return;
+  if(!navigator.onLine){
+    if(manual){ $("m").style.color="#B42318"; $("m").textContent="You are offline. Connect to the internet to continue."; }
+    return;
+  }
+  probing=true;
+  if(manual){ $("m").style.color="#475569"; $("m").textContent="Checking your connection…"; }
+  probe(function(ok){
+    probing=false;
+    if(ok) online();
+    else if(manual){ $("m").style.color="#B42318"; $("m").textContent="Your connection is too weak right now. We will keep trying."; }
+  });
+}
+
+$("go").onclick=function(){ tryOpen(true); };
+window.addEventListener("online",function(){ tryOpen(false); });
+
+/* Backup watchdog: the "online" event is not always reliable on mobile networks. */
+setInterval(function(){ tryOpen(false); }, 4000);
 </script></body></html>
