@@ -3,6 +3,7 @@ package com.elad.app;
 import android.app.Activity;
 import android.app.DownloadManager;
 import android.content.Intent;
+import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
@@ -11,6 +12,7 @@ import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
+import android.view.Gravity;
 import android.view.View;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
@@ -22,6 +24,8 @@ import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
 
 import androidx.core.splashscreen.SplashScreen;
 import androidx.credentials.Credential;
@@ -45,19 +49,55 @@ public class MainActivity extends Activity {
     // Web client ID (Firebase console > Authentication > Sign-in method > Google > Web SDK configuration)
     static final String WEB_CLIENT_ID = "898464952387-p5nlra4lk8jcm61e9ot6n7tq6okf9j96.apps.googleusercontent.com";
 
-    WebView web;
-    ValueCallback<Uri[]> chooser;
-    volatile boolean ready = false;   // native splash stays until the first page is visible
+    // Size of the icon on the loading cover. Matches the system splash icon canvas.
+    // If you ever see a small "jump" between the system splash and the cover, tweak this number.
+    static final int ICON_DP = 288;
+    // After the page finishes loading, wait this long for it to paint before removing the cover
+    // (the page can remove it sooner by calling EladApp.splashDone()).
+    static final long PAGE_SETTLE_MS = 700;
+    // If nothing is shown after this long, give up and show offline.html (which keeps retrying by itself).
+    static final long SLOW_LOAD_MS = 30000;
 
-    // How many times we've retried loading HOME after a network error, before
-    // giving up and falling back to the bundled offline.html. This gives the
-    // Service Worker (which caches the last signed-in app state) a real chance
-    // to serve its cache instead of us short-circuiting straight to a blank,
-    // origin-isolated static page.
+    WebView web;
+    FrameLayout cover;                // white screen with the ELAD icon, sits on top of the WebView
+    ValueCallback<Uri[]> chooser;
+    volatile boolean ready = false;   // native splash stays only until the cover is in place
+
+    // How many times we retry loading HOME after a network error before
+    // falling back to the bundled offline.html. This gives the Service Worker
+    // a real chance to serve its cache.
     int offlineRetries = 0;
+
+    // URL of the last failed main-frame load. The browser fires onPageFinished for its own
+    // error page with this URL; we must not treat that as "the page is ready".
+    String errorUrl = null;
+    // True while the bundled offline.html is what's on screen.
+    boolean onOfflinePage = false;
 
     final Executor mainExec = new Handler(Looper.getMainLooper())::post;
     final Handler mainHandler = new Handler(Looper.getMainLooper());
+
+    final Runnable hideCoverTask = this::hideCover;
+    final Runnable slowLoadTask = () -> {
+        if (cover != null && cover.getVisibility() == View.VISIBLE) web.loadUrl(OFFLINE_PAGE);
+    };
+
+    void showCover() {
+        mainHandler.removeCallbacks(hideCoverTask);
+        cover.animate().cancel();
+        cover.setAlpha(1f);
+        cover.setVisibility(View.VISIBLE);
+        mainHandler.removeCallbacks(slowLoadTask);
+        mainHandler.postDelayed(slowLoadTask, SLOW_LOAD_MS);
+    }
+
+    void hideCover() {
+        mainHandler.removeCallbacks(hideCoverTask);
+        mainHandler.removeCallbacks(slowLoadTask);
+        if (cover.getVisibility() != View.VISIBLE) return;
+        cover.animate().alpha(0f).setDuration(180)
+            .withEndAction(() -> cover.setVisibility(View.GONE)).start();
+    }
 
     void openOutside(String url) {
         try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url))); } catch (Exception e) {}
@@ -130,9 +170,12 @@ public class MainActivity extends Activity {
             runOnUiThread(() -> { if (onOurPage()) nativeGoogleSignIn(); });
         }
 
-        // Kept so the page can still call it. The app has no second splash.
+        // The page calls this when its real UI is on screen: the loading cover goes away right then.
+        // If the page never calls it, the cover is removed shortly after the page finishes loading.
         @JavascriptInterface
-        public void splashDone() { }
+        public void splashDone() {
+            runOnUiThread(() -> { if (onOurPage()) hideCover(); });
+        }
     }
 
     @Override
@@ -145,9 +188,28 @@ public class MainActivity extends Activity {
         super.onCreate(b);
         applySystemBars();
 
+        FrameLayout root = new FrameLayout(this);
+        root.setBackgroundColor(Color.WHITE);
+
         web = new WebView(this);
         web.setBackgroundColor(Color.WHITE);
-        setContentView(web);
+        root.addView(web, new FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+
+        // Loading cover: same white + same icon as the system splash, so there is never a bare white page.
+        cover = new FrameLayout(this);
+        cover.setBackgroundColor(Color.WHITE);
+        cover.setClickable(true); // swallow taps while it is showing
+        ImageView icon = new ImageView(this);
+        icon.setImageResource(R.drawable.elad_splash_icon);
+        icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        int px = (int) (ICON_DP * getResources().getDisplayMetrics().density);
+        px = Math.min(px, getResources().getDisplayMetrics().widthPixels);
+        cover.addView(icon, new FrameLayout.LayoutParams(px, px, Gravity.CENTER));
+        root.addView(cover, new FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+
+        setContentView(root);
 
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
@@ -169,37 +231,60 @@ public class MainActivity extends Activity {
             }
 
             @Override
-            public void onPageCommitVisible(WebView v, String url) {
-                super.onPageCommitVisible(v, url);
-                ready = true;
+            public void onPageStarted(WebView v, String url, Bitmap favicon) {
+                super.onPageStarted(v, url, favicon);
+                mainHandler.removeCallbacks(hideCoverTask);
+                if (url != null && url.equals(errorUrl)) errorUrl = null;
+                boolean isFile = url != null && url.startsWith("file:");
+                // Leaving offline.html to try the real site again: cover the screen while it loads.
+                if (!isFile && onOfflinePage) {
+                    onOfflinePage = false;
+                    showCover();
+                }
             }
 
             @Override
             public void onPageFinished(WebView v, String url) {
                 super.onPageFinished(v, url);
-                ready = true;
-                // A page finished loading (either the real site or offline.html).
-                // Reset the retry count so the next time we lose connectivity we
-                // again get a fresh chance to let the Service Worker serve its cache.
-                offlineRetries = 0;
                 CookieManager.getInstance().flush();
+                String u = url == null ? "" : url;
+
+                // This is the browser's own error page for a failed load, not real content.
+                // Ignore it (and do NOT reset the retry counter).
+                if (errorUrl != null && errorUrl.equals(u)) { errorUrl = null; return; }
+
+                if (u.startsWith("file:")) {
+                    // offline.html is on screen: show it.
+                    onOfflinePage = true;
+                    mainHandler.removeCallbacks(hideCoverTask);
+                    mainHandler.postDelayed(hideCoverTask, 150);
+                    return;
+                }
+
+                // A real page finished loading. Reset the retry count and let it paint
+                // before removing the cover (or the page can call EladApp.splashDone()).
+                offlineRetries = 0;
+                mainHandler.removeCallbacks(hideCoverTask);
+                mainHandler.postDelayed(hideCoverTask, PAGE_SETTLE_MS);
             }
 
-            // No network and the service worker has nothing cached yet:
-            // show the bundled sign-in screen instead of Chrome's error page.
-            // Before giving up, retry HOME once so the Service Worker (which
-            // caches the last signed-in app shell) gets a real chance to
-            // intercept the navigation and serve it from cache.
+            // No network (or a very weak one): keep the icon cover up, retry HOME so the Service Worker
+            // can serve its cache, and only then fall back to the bundled offline.html.
             @Override
             public void onReceivedError(WebView v, WebResourceRequest r, WebResourceError e) {
                 super.onReceivedError(v, r, e);
                 if (!r.isForMainFrame()) return;
                 String failed = r.getUrl().toString();
-                if (failed.startsWith("file:")) { ready = true; return; }
+                mainHandler.removeCallbacks(hideCoverTask);
 
-                if (offlineRetries < 1) {
+                if (failed.startsWith("file:")) { hideCover(); return; }
+
+                errorUrl = failed;
+                showCover(); // hide the browser's error page behind the icon cover
+
+                if (offlineRetries < 2) {
                     offlineRetries++;
-                    mainHandler.postDelayed(() -> v.loadUrl(HOME), 200);
+                    mainHandler.postDelayed(() -> v.loadUrl(HOME), 1000);
                     return;
                 }
                 offlineRetries = 0;
@@ -244,8 +329,10 @@ public class MainActivity extends Activity {
             } catch (Exception e) { openOutside(url); }
         });
 
-        // Safety net: never hold the splash longer than 2.5 s on a very slow connection.
-        mainHandler.postDelayed(() -> ready = true, 2500);
+        // Cover is already in place (same look as the system splash), so the system splash can leave now.
+        // The cover itself stays until real content is displayed.
+        showCover();
+        ready = true;
 
         if (b == null) web.loadUrl(HOME); else web.restoreState(b);
     }
